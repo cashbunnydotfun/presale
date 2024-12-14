@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import "./libraries/BEP20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./interfaces/IBEP20.sol";
+import "./libraries/ReentrancyGuard.sol";
 
-contract Presale is ReentrancyGuard, BEP20 {
+contract Presale is ReentrancyGuard {
     address public owner;
     uint256 public maxContribution = 5 ether;
     uint256 public startTime = block.timestamp;
@@ -14,7 +14,7 @@ contract Presale is ReentrancyGuard, BEP20 {
     uint256 public participantCount;
     bool public finalized;
 
-    BEP20 public token;
+    IBEP20 public token;
 
     mapping(address => uint256) public contributions;
     mapping(address => bool) private hasParticipated;
@@ -49,15 +49,21 @@ contract Presale is ReentrancyGuard, BEP20 {
     }
 
     modifier onlyAfterSale() {
-        if (block.timestamp <= endTime) revert SaleNotActive();
+        if (!finalized) {
+            if (block.timestamp <= endTime) revert SaleNotActive();
+        }
         _;
     }
 
-    constructor(uint256 _tokenPrice, uint256 _endTime) BEP20("TestToken", "TST") {
+    constructor(
+        address _tokenAddress, 
+        uint256 _tokenPrice, 
+        uint256 _endTime
+    ) {
         owner = msg.sender;
         tokenPrice = _tokenPrice;
         endTime = _endTime;
-        _tokengeneration(address(this), 1_000_000_000 * 10**decimals());
+        token = IBEP20(_tokenAddress);
     }
 
     function contribute(bytes32 referralCode) external payable onlyDuringSale {
@@ -112,6 +118,12 @@ contract Presale is ReentrancyGuard, BEP20 {
         payable(recipient).transfer(balance);
         emit FundsWithdrawn(recipient, balance);
     }
+    
+    function recoverTokens(address tokenAddress) external onlyOwner {
+        require(tokenAddress != address(0), "Invalid token address");
+        IBEP20 recoverToken = IBEP20(tokenAddress);
+        recoverToken.transfer(owner, recoverToken.balanceOf(address(this)));
+    }
 
     function setTokenPrice(uint256 _tokenPrice) external onlyOwner {
         tokenPrice = _tokenPrice;
@@ -137,4 +149,5 @@ contract Presale is ReentrancyGuard, BEP20 {
     function getContribution(address participant) external view returns (uint256) {
         return contributions[participant];
     }
+    
 }
